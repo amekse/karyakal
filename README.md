@@ -22,9 +22,5 @@ Karyakal is a modular and extendable platform developed as part of an academic r
 ## Setup
 
 ```bash
-git clone https://github.com/amekse/karyakal.git
-cd karyakal
-bash setup.sh
-source env/bin/activate
-jupyter notebook
+
 ```

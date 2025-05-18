@@ -18,6 +18,8 @@ __pycache__/
 venv/
 ENV/
 env/
+karyakal/
+karyakal
 *.env
 
 # PyInstaller
