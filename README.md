@@ -22,13 +22,9 @@ Karyakal is a modular and extendable platform developed as part of an academic r
 ## Setup
 
 ```bash
-# Clone the repo
-git clone https://github.com/yourusername/karyakal.git
+git clone https://github.com/amekse/karyakal.git
 cd karyakal
-
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
+bash setup.sh
+source env/bin/activate
+jupyter notebook
+```
