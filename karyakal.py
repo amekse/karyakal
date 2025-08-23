@@ -7,6 +7,7 @@ import numpy as np
 import copy
 from sklearn.preprocessing import StandardScaler
 from scipy.spatial.distance import euclidean
+import time
 
 # %%
 ENGINEER_MOCK_DATA_LOCATION = 'engineer_mock_data.json' # TODO: user input
@@ -454,6 +455,41 @@ def assign_tasks_to_engineers(projected_sprint_list, task_limit=5, distance_thre
 assigned_projected_sprint_list = assign_tasks_to_engineers(projected_sprint_list, 5, 1.5)
 
 # %%
+# Evaluation metrics for baseline comparison
+def evaluate_assignments(assigned_projected_sprint_list, tasks_list):
+    total_tasks = len(tasks_list)
+    assigned_tasks = 0
+    distances = []
+    load_counts = []
+
+    for sprint, sprint_data in assigned_projected_sprint_list.items():
+        for skill, skill_data in sprint_data.items():
+            engineers = skill_data["engineers"]
+
+            for eng in engineers:
+                load_counts.append(len(eng["assigned_tasks"]))
+                for task in eng["assigned_tasks"]:
+                    assigned_tasks += 1
+                    if "distance" in task:
+                        distances.append(task["distance"])
+
+    match_rate = assigned_tasks / total_tasks if total_tasks > 0 else 0
+    avg_dist = np.mean(distances) if distances else 0
+    unassigned_pct = (1 - match_rate) * 100
+    load_var = np.var(load_counts) if load_counts else 0
+
+    return {
+        "match_rate": match_rate,
+        "avg_dist": avg_dist,
+        "unassigned_pct": unassigned_pct,
+        "load_var": load_var
+    }
+
+output_metrics = evaluate_assignments(assigned_projected_sprint_list, tasks_mock)
+print("Output Metrics:", output_metrics)
+
+
+# %%
 with open('assigned_projected_sprint_list.json', 'w') as f:
     json.dump(assigned_projected_sprint_list, f, indent=4)
 
@@ -506,4 +542,68 @@ def plot_all_assignments(modified_data):
 
 plot_all_assignments(assigned_projected_sprint_list)
 
+# %%
 
+# Benchmarking runtime 
+def benchmark_runtime(engineer_data, task_data, max_tasks_list, num_repeats=3):
+    results = []
+
+    for n_tasks in max_tasks_list:
+        sampled_tasks = task_data * (n_tasks // len(task_data) + 1)
+        sampled_tasks = sampled_tasks[:n_tasks] 
+
+        runtimes = []
+        for _ in range(num_repeats):
+            eng_copy = copy.deepcopy(engineer_data)
+            task_copy = copy.deepcopy(sampled_tasks)
+
+            start = time.time()
+
+            eng_sorted = sort_items_by_skills(eng_copy, ENGINEER_SKILL_KEY_NAME)
+            task_sorted = sort_items_by_skills(task_copy, TASK_SKILL_KEY_NAME)
+
+            eng_quant = item_time_complexity_list_generator(
+                eng_sorted, engineer_time_efficiency_calculation, engineer_complexity_handling_calculation
+            )
+            task_quant = item_time_complexity_list_generator(
+                task_sorted, task_time_calculation, task_complexity_calculation
+            )
+
+            sprint_dict = calculate_sprints(SPRINT_LENGTH, QUARTER_START_DATE, QUARTER_END_DATE)
+            sprint_populated = select_tasks_engineers_by_skill(
+                task_quant, eng_quant, sprint_dict, QUARTER_START_DATE, SPRINT_LENGTH
+            )
+
+            sprint_matrix = populate_sprint_matrix({}, sprint_populated)
+            cov_matrix = calculate_covariance_matrix({}, sprint_matrix)
+            eigen_data = calculate_eigen_for_skill_covariances({})
+            centered = mean_center_by_sprint_skill(sprint_populated)
+            projected = project_tasks_engineers(centered, eigen_data)
+
+            assigned = assign_tasks_to_engineers(projected, task_limit=5, distance_threshold=1.5)
+
+            end = time.time()
+            runtimes.append(end - start)
+
+        avg_runtime = np.mean(runtimes)
+        results.append({
+            "tasks": n_tasks,
+            "engineers": len(engineer_data),
+            "avg_runtime_sec": avg_runtime
+        })
+
+    return results
+
+max_tasks_list = [50, 100, 200, 500, 1000]
+runtime_results = benchmark_runtime(engineer_mock, tasks_mock, max_tasks_list)
+
+df_runtime = pd.DataFrame(runtime_results)
+print(df_runtime)
+
+plt.figure(figsize=(8,6))
+plt.plot(df_runtime["tasks"], df_runtime["avg_runtime_sec"], marker="o")
+plt.xlabel("Number of Tasks")
+plt.ylabel("Average Runtime per Sprint (sec)")
+plt.title("Scalability of Covariance–Eigenvector Assignment")
+plt.grid(True)
+plt.show()
