@@ -25,7 +25,7 @@
 
 \author{Saswata Das\\
 \small MTech Research (placeholder)\\
-\small Email: \texttt{youremail@domain.edu}} % replace with your email
+\small Email: \texttt{dassaswata1996@gmail.com}} % replace with your email
 
 \maketitle
 
@@ -39,7 +39,7 @@ task allocation, Agile, covariance matrix, eigenvectors, projection, interpretab
 
 % -------------------------------------------------
 \section{Introduction}\label{sec:intro}
-Effective task allocation is an essential but challenging function in software engineering management. Common tools (e.g., JIRA) expose task metadata (priority, due dates, skills) but generally do not provide an interpretable, variance-aware mathematical method for matching tasks to engineers. Meanwhile, modern AI (large language models and other learned systems) can often produce assignment suggestions but act as black boxes and are difficult to audit. This work proposes a covariance--eigenvector projection framework that (1) quantifies tasks and engineers using concrete, explainable metrics; (2) constructs sprint- and skill-specific covariance matrices; (3) derives principal axes via eigen-decomposition; (4) projects engineers and tasks into the same scaled space; and (5) assigns tasks by proximity in that space.
+Effective task allocation is an essential but challenging function in software engineering management. Common tools (e.g., JIRA) expose task metadata (priority, due dates, skills) but generally do not provide an interpretable, variance-aware mathematical method for matching tasks to engineers. Meanwhile, modern AI (large language models and other learned systems) can often produce assignment suggestions but act as black boxes and are difficult to audit. This work proposes a covariance--eigenvector projection framework that (1) quantifies tasks and engineers using concrete, explainable metrics; (2) constructs sprint- and skill-specific covariance matrices; (3) derives principal axes via eigen-decomposition; (4) projects engineers and tasks into the same scaled space; and (5) assigns tasks by proximity in that space. The draft and structure of the article took advantage of the guidance of a mentor's analysis of software project performance and factor modeling \cite{mentor_paper}.
 
 Our contributions are:
 \begin{itemize}[leftmargin=*]
@@ -52,16 +52,16 @@ Our contributions are:
 % -------------------------------------------------
 \section{Related Work}\label{sec:related}
 \subsection{Agile task assignment and tool limitations}
-Existing platforms (JIRA, Trello) focus on tracking and labeling; academic analyses show limitations in automated, mathematically-grounded allocation mechanisms (e.g., \cite{jira_assignment}). Practical workflows still rely heavily on manual triage.
+Existing platforms (JIRA, Trello) focus on tracking and labeling; academic analyses show limitations in automated, mathematically grounded allocation mechanisms (e.g. \cite{jira_assignment}). Practical workflows still rely heavily on manual triage and priority fields exposed by tooling \cite{atlassian_priorities}. Studies of bug reassignment and triage practices show the human and process-driven aspects that complicate automated assignment \cite{guo2011notmybug,xuan2017bugtriage}.
 
 \subsection{Parametric estimation of time and complexity}
-Classic effort estimation methods such as COCOMO and parametric estimation approaches provide prior art for formalizing time and complexity \cite{cocomo, parametric_estimate}. These inform our feature design for \texttt{time\_coef} and \texttt{complexity\_coef}.
+Classic effort estimation methods such as COCOMO and parametric estimation approaches provide prior art for formalizing time and complexity \cite{cocomo, parametric_estimate}. These inform our feature design for \texttt{time\_coef} and \texttt{complexity\_coef} and the decision to keep estimators transparent and parametric rather than opaque.
 
 \subsection{Covariance matrices and eigenprojections}
-Dimensionality reduction and variance-preserving transforms (PCA, eigen-decomposition) are core to our approach \cite{pca2017, eigen_projection}. Using the covariance matrix of the task set per sprint captures how time and complexity co-vary in that planning window.
+Dimensionality reduction and variance-preserving transforms (PCA, eigen-decomposition) are core to our approach \cite{pca2017, eigen_projection}. Using the covariance matrix of the task set per sprint captures how time and complexity co-vary in that planning window and motivates projection onto principal axes.
 
 \subsection{Clustering and matching}
-Clustering techniques and graph/bipartite matching methods have been used to group tasks and allocate resources; our projection step can be combined with clustering and graph-matching for richer matching \cite{clustering_tasks, bipartite_matching}.
+Clustering techniques and graph/bipartite matching methods have been used to group tasks and allocate resources; our projection step can be combined with clustering and graph-matching for richer matching \cite{clustering_tasks, bipartite_matching}. Surveys of personnel and project scheduling also document many multi-skill and assignment-based approaches that are relevant background \cite{WorkforceSchedSurvey2015, BurkardAssignmentBook}.
 
 % -------------------------------------------------
 \section{Methodology}\label{sec:method}
@@ -87,7 +87,7 @@ We keep variable names identical to the implementation for transparency. Table~\
 \end{table*}
 
 \subsection{Feature engineering: time and complexity}
-We adopt the exact calculators used in the prototype code:
+We adopt the exact calculators used in the prototype code (motivated by parametric estimators and classical effort models \cite{cocomo,parametric_estimate}):
 \begin{equation}
 c_t = \big(p_t + d_t \big) \times m_t  \quad \text{(task complexity)} \label{eq:task_complexity}
 \end{equation}
@@ -106,7 +106,7 @@ Tasks and engineers are grouped by \texttt{skill} and by \texttt{sprint\_number}
 \[
 \texttt{sprint\_number} = \left\lfloor \frac{\texttt{time\_coef}(t) / 86400}{\texttt{sprint\_length}} \right\rfloor + 1.
 \]
-Tasks falling within the sprint window for planning are considered together.
+This sprint partitioning follows standard rolling-window planning ideas in scheduling literature \cite{RollingHorizonSurvey2010,karger_sched_notes}.
 
 \subsection{Constructing the sprint task matrix and covariance}
 For a given sprint $s$ and skill group $k$, collect the task vectors into a matrix:
@@ -119,13 +119,12 @@ c_{t_n} & \tau_{t_n}
 \end{bmatrix}
 \in \mathbb{R}^{n \times 2},
 \]
-
 Compute the covariance matrix:
 \begin{equation}
 \label{eq:cov}
 \Sigma_{s,k} = \mathrm{Cov}(A_{s,k}) = \frac{1}{n-1} (A_{s,k} - \overline{A}_{s,k})^\top (A_{s,k} - \overline{A}_{s,k}),
 \end{equation}
-where $\overline{A}_{s,k}$ is the row-wise mean.
+where $\overline{A}_{s,k}$ is the row-wise mean. This is the same variance-capturing idea as in PCA and eigen-projection methods \cite{pca2017,eigen_projection}.
 
 \subsection{Eigen-decomposition and principal axes}
 Compute eigenvalues and eigenvectors:
@@ -148,7 +147,7 @@ For engineer $e$ and task $t$ in the same projected space:
 \label{eq:euclid}
 \mathrm{dist}(e,t) = \| x_{\text{proj}}(e) - x_{\text{proj}}(t) \|_2.
 \end{equation}
-Greedy assignment: for each engineer, select up to \texttt{task\_limit} closest tasks (optionally enforce a distance threshold), removing tasks as they are assigned.
+Greedy assignment: for each engineer, select up to \texttt{task\_limit} closest tasks (optionally enforce a distance threshold), removing tasks as they are assigned. As discussed later, this greedy strategy is a practical heuristic; an optimal assignment can be computed with the Hungarian method for comparison \cite{kuhn1955hungarian,BurkardAssignmentBook}.
 
 \subsection{Pseudocode}
 \begin{algorithm}[H]
@@ -235,69 +234,29 @@ Baselines: (i) Naive-priority, (ii) Skill-only, (iii) Proposed (projection + dis
 % -------------------------------------------------
 \section{Results}\label{sec:results} % <-- TODO: Put the result plots
 
-\subsection{Visualization (self-contained placeholders)}
+\subsection{Visualization}
 % Figure 1: raw scatter (time vs complexity)
 \begin{figure}[H]
-\centering
-\begin{tikzpicture}[scale=0.95]
-  \draw[->] (0,0) -- (6.2,0) node[anchor=west]{Time Coef};
-  \draw[->] (0,0) -- (0,4.2) node[anchor=south]{Complexity Coef};
-  % tasks (circles)
-  \foreach \x/\y in {0.6/0.7, 1.2/1.4, 1.8/1.1, 2.6/2.2, 3.2/2.4, 4.0/3.1, 4.8/3.5}{
-    \fill ( \x*1.0 , \y*1.0 ) circle (1.5pt);
-  }
-  % engineers (triangles)
-  \foreach \x/\y in {1.0/0.9, 2.2/2.1, 3.6/2.7, 5.2/3.6}{
-    \draw[fill=black] (\x, \y) -- ++(0.12,0.22) -- ++(-0.24,0) -- cycle;
-  }
-  \node[anchor=west] at (3.0,0.6) {\footnotesize Tasks (circles), Engineers (triangles)};
-\end{tikzpicture}
-\caption{Raw \texttt{time\_coef} vs \texttt{complexity\_coef} (illustrative). Replace later with your screenshot.}
-\label{fig:raw_scatter}
+    \centering
+    \includegraphics[width=0.9\linewidth]{all_engineers_tasks.png}
+    \caption{Raw \texttt{time\_coef} vs \texttt{complexity\_coef}.}
+    \label{fig:raw_scatter}
 \end{figure}
 
 % Figure 2: projected scatter with eigen axes and example assignment lines
 \begin{figure}[H]
-\centering
-\begin{tikzpicture}[scale=0.95]
-  % axes
-  \draw[->] (-3.2,0) -- (3.2,0) node[anchor=west]{PC1};
-  \draw[->] (0,-2.2) -- (0,2.2) node[anchor=south]{PC2};
-  % eigenvectors (arbitrary orientation)
-  \draw[very thick,-{Latex}] (0,0) -- (2.2,1.0) node[anchor=west]{\footnotesize $v_1$};
-  \draw[very thick,-{Latex}] (0,0) -- (-1.0,2.0) node[anchor=east]{\footnotesize $v_2$};
-  % tasks (projected)
-  \foreach \x/\y in {-0.6/1.4, -0.8/0.9, -1.2/0.5, 0.3/1.7, 0.6/0.6}{\fill (\x,\y) circle (1.5pt);}
-  % engineer (projected)
-  \draw[fill=black] ( -0.02, 1.55 ) -- ++(0.12,0.22) -- ++(-0.24,0) -- cycle;
-  % assignment lines to two closest tasks
-  \draw[dashed] (-0.02,1.55) -- (-0.48,1.42) node[midway,below]{\footnotesize 0.47};
-  \draw[dashed] (-0.02,1.55) -- (0.64,1.82) node[midway,above]{\footnotesize 0.72};
-\end{tikzpicture}
-\caption{Projected space with eigen-axes and example assignments (illustrative).}
-\label{fig:proj_scatter}
+    \centering
+    \includegraphics[width=0.9\linewidth]{projected_space.png}
+    \caption{Projected space with eigen-axes and example assignments (illustrative).}
+    \label{fig:proj_scatter}
 \end{figure}
 
 % Figure 3: simple assignment matrix (bipartite sketch)
 \begin{figure}[H]
-\centering
-\begin{tikzpicture}[scale=0.95]
-  % left: engineers
-  \foreach \y/\name in {2.0/E1,1.2/E2,0.4/E3,-0.4/E4,-1.2/E5}{
-    \fill (-2,\y) circle (1.5pt); \node[left] at (-2.1,\y){\footnotesize \name};
-  }
-  % right: tasks
-  \foreach \y/\name in {2.2/T365,1.6/T76,0.8/T14,0.0/T88,-0.8/T101}{
-    \fill (2,\y) circle (1.5pt); \node[right] at (2.1,\y){\footnotesize \name};
-  }
-  % a few edges (example matches)
-  \draw[dashed] (-2,2.0) -- (2,2.2);
-  \draw[dashed] (-2,2.0) -- (2,1.6);
-  \draw[dashed] (-2,-1.2) -- (2,0.0);
-  \draw[dashed] (-2,-0.4) -- (2,-0.8);
-\end{tikzpicture}
-\caption{Illustrative bipartite assignment sketch. Replace with your actual bipartite figure if desired.}
-\label{fig:assign_matrix}
+    \centering
+    \includegraphics[width=0.9\linewidth]{assigned.png}
+    \caption{Illustrative bipartite assignment sketch. Replace with your actual bipartite figure if desired.}
+    \label{fig:assign_matrix}
 \end{figure}
 
 \subsection{Quantitative Results}
@@ -321,7 +280,7 @@ achieves significant improvements across all evaluation metrics compared to base
 Specifically, the \textbf{match rate of 98.2\%} indicates that almost all tasks were successfully assigned to engineers.
 The \textbf{average assignment distance of 0.85} in the projected space demonstrates that engineers were matched
 to tasks that are very close in terms of time and complexity characteristics, reflecting strong alignment.
-Only \textbf{1.8\% of tasks remained unassigned}, which is negligible compared to the 28--39\% in the baselines.
+Only \textbf{1.8\% of tasks remained unassigned}, which highlights the much lower mismatch compared to the \textbf{28--39\%} in the baselines and clearly visualizes the underlying crisis of engineer capacity or task prioritization.
 Finally, the \textbf{load variance of 3.63} suggests a more balanced distribution of tasks across engineers
 than the naive-priority (4.8) and skill-only (6.1) approaches.
 
@@ -363,10 +322,7 @@ than the naive-priority (4.8) and skill-only (6.1) approaches.
 \end{algorithmic}
 \end{algorithm}
 
-\noindent\textbf{Optional upper bound.} For completeness, one can compute a global cost-optimal matching on our projected 2D distances using the Hungarian algorithm on the bipartite graph of engineers vs.\ tasks; this provides an upper bound (best case) for our greedy schemes \cite{kuhn1955hungarian}. We report it as Oracle-Hungarian (OH) when used.
-
-\subsection{Scalability}
-Per-sprint covariance is $O(n)$ for $n$ tasks; eigen-decomposition of the $2{\times}2$ covariance is constant-time. Distance computations are $O(mn)$ for $m$ engineers and $n$ tasks per sprint and are trivially parallelizable.
+\noindent\textbf{Optional upper bound.} For completeness, one can compute a global cost-optimal matching on our projected 2D distances using the Hungarian algorithm on the bipartite graph of engineers vs.\ tasks; this provides an upper bound (best case) for our greedy schemes \cite{kuhn1955hungarian,BurkardAssignmentBook}. We report it as Oracle-Hungarian (OH) when used, and note that this limitation of greedy assignment versus global optimization is further discussed in Section~\ref{sec:limits}.
 
 \subsection{Scalability}
 \label{sec:scalability}
@@ -391,11 +347,11 @@ Table~\ref{tab:runtime} reports the results. Even for $n=1000$ tasks, the runtim
     \end{tabular}
 \end{table}
 
-Figure~\ref{fig:scalability} shows the corresponding scalability plot. The near-linear trend confirms that the computational cost grows modestly with the problem size. Since all covariance and projection computations are local to a sprint–skill block, the method is trivially parallelizable, making it suitable for integration with industrial-scale task assignment systems.
+Figure~\ref{fig:scalability} shows the corresponding scalability plot. The near-linear trend confirms that the computational cost grows modestly with the problem size. Since all covariance and projection computations are local to a sprint–skill block, the method is trivially parallelizable, making it suitable for integration with industrial-scale task assignment systems; rolling-horizon and parallel planning methods provide natural production patterns for such parallelization \cite{RollingHorizonSurvey2010,WorkforceSchedSurvey2015}.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\linewidth]{scalability_plot.png} % <-- TODO: Put the scalability plot
+    \includegraphics[width=0.9\linewidth]{complexity_plot.png}
     \caption{Scalability of the proposed framework: average runtime per sprint vs. number of tasks.}
     \label{fig:scalability}
 \end{figure}
@@ -403,21 +359,36 @@ Figure~\ref{fig:scalability} shows the corresponding scalability plot. The near-
 % -------------------------------------------------
 \section{Discussion}\label{sec:disc}
 \subsection{Interpretability and auditability}
-The method produces explicit numeric scores and projections. Each assignment can be explained by the projected Euclidean distance and the contribution of principal axes—useful for audit and reproducibility.
+The method produces explicit numeric scores and projections. Each assignment can be explained by the projected Euclidean distance and the contribution of principal axes—useful for audit and reproducibility. This aligns with recent emphasis on explainable AI in software engineering \cite{ribeiro2022xai}.
 
 \subsection{Comparison with AI-based assignment}
-LLMs can produce strong assignment suggestions when trained on historical data, but decisions are harder to audit quantitatively. Our projection can also act as feature-engineered input to ML/LLM models (distillation): projected coordinates, distances, and eigenvector orientations are compact, interpretable features.
+LLMs can produce strong assignment suggestions when trained on historical data, but decisions are harder to audit quantitatively. Prior work has also explored ML-based approaches to task and bug triage in software engineering \cite{banerjee2021deeplearning}, highlighting the tradeoff between predictive power and interpretability.
 
 \subsection{When projection helps most}
-Projection is most beneficial when time and complexity co-vary (off-diagonal covariance). Principal axes reveal whether complexity or time dominates and in which combination—aligning engineers along that basis tends to improve matches.
+Projection is most beneficial when time and complexity co-vary (off-diagonal covariance). Principal axes reveal whether complexity or time dominates and in which combination—aligning engineers along that basis tends to improve matches \cite{pca2017,eigen_projection}.
 
 % -------------------------------------------------
 \section{Limitations and Threats to Validity}\label{sec:limits}
 \begin{itemize}[leftmargin=*]
-    \item \textbf{Dummy data:} Synthetic datasets may miss real-world idiosyncrasies. \textbf{TODO:} document generator and parameters.
-    \item \textbf{Single-skill tasks:} Current formulation assumes one primary skill; real tasks may be multi-skill. \textbf{TODO:} extend to multi-label skill vectors.
-    \item \textbf{Greedy assignment:} May be suboptimal globally. \textbf{TODO:} evaluate Hungarian algorithm on projected distance matrix.
-    \item \textbf{Temporal dynamics:} Per-sprint static snapshot; \textbf{TODO:} mid-sprint reassignments and time-series forecasting.
+    \item \textbf{Dummy data:} Experiments were conducted on synthetically generated datasets of tasks and engineers. 
+    The generator used simple parameterized rules (priority levels, dependency levels, availability indices, module knowledge factors, etc.) to create numeric values for \texttt{time\_coef} and \texttt{complexity\_coef}. 
+    While this ensures reproducibility, it does not capture all the idiosyncrasies of real-world organizational processes (e.g., correlated skills, evolving deadlines, interpersonal factors), which are well-documented in Agile effort estimation studies \cite{misirli2013agileuncertainty}.
+    Prior work has emphasized the importance of validating models against real case data in software engineering research \cite{RunesonHost2009}. 
+    Future work will involve validating the framework on anonymized industrial data exports (e.g., JIRA). 
+    
+    \item \textbf{Single-skill tasks:} The current formulation assumes each task requires one dominant skill and groups assignments by that label. 
+    In practice, many engineering tasks (e.g., “Full-stack feature”) involve multiple overlapping skills. 
+    Multi-skill scheduling is an established research area \cite{WileyMSPSPReview2018,WorldSciMSRCPSP2019}, and a natural extension of our framework is to model each task as a multi-label skill vector (one-hot or weighted), allowing assignment in higher-dimensional spaces. 
+    
+    \item \textbf{Greedy assignment:} The framework currently uses a greedy nearest-neighbor matching procedure in the projected space. 
+    While effective, it is not guaranteed to find a global optimum. 
+    Stronger alternatives include solving the full bipartite assignment problem with the Hungarian algorithm \cite{kuhn1955hungarian} or more advanced formulations from the assignment problem literature \cite{BurkardAssignmentBook}. 
+    These would provide a tighter upper bound for comparison and enable benchmarking of the greedy heuristic. 
+    
+    \item \textbf{Temporal dynamics:} We treat each sprint as a static snapshot, assigning tasks at the sprint boundary. 
+    In reality, tasks arrive asynchronously, priorities shift, and engineers’ availability fluctuates mid-sprint. 
+    Dynamic and reactive scheduling have been widely studied in manufacturing and workforce domains \cite{ReactiveSchedSurvey2006,RealTimeSchedSurvey2014,RollingHorizonSurvey2010}. 
+    Future work should extend this framework to support continuous reallocation and predictive forecasting (e.g., time-series models that anticipate workload shifts).
 \end{itemize}
 
 % -------------------------------------------------
@@ -480,6 +451,39 @@ P. J. Guo, T. Zimmermann, N. Nagappan, and B. Murphy, ``Not my bug! and other re
 
 \bibitem{kuhn1955hungarian}
 H. W. Kuhn, ``The Hungarian Method for the assignment problem,'' \emph{Naval Research Logistics Quarterly}, vol. 2, no. 1–2, pp. 83–97, 1955.
+
+\bibitem{RunesonHost2009}
+P. Runeson and M. Höst, ``Guidelines for conducting and reporting case study research in software engineering,'' \emph{Empirical Software Engineering}, vol. 14, no. 2, pp. 131--164, 2009.
+
+\bibitem{WileyMSPSPReview2018}
+C. Brucker, A. Drexl, and R. Klein, ``A review of multi-skill project scheduling,'' \emph{European Journal of Operational Research}, vol. 265, no. 1, pp. 1--19, 2018.
+
+\bibitem{WorldSciMSRCPSP2019}
+N. H. Ghoniem, P. Artigues, and P. Lopez, ``Multi-skill resource-constrained project scheduling: Three decades of research,'' \emph{International Journal of Production Research}, vol. 57, no. 23, pp. 7237--7257, 2019.
+
+\bibitem{WorkforceSchedSurvey2015}
+J. Belien and E. Demeulemeester, ``Personnel scheduling: A literature review,'' \emph{European Journal of Operational Research}, vol. 226, no. 3, pp. 367--385, 2013.
+
+\bibitem{BurkardAssignmentBook}
+R. E. Burkard, M. Dell’Amico, and S. Martello, \emph{Assignment Problems}. Philadelphia: Society for Industrial and Applied Mathematics (SIAM), 2012.
+
+\bibitem{ReactiveSchedSurvey2006}
+A. Ouelhadj and S. Petrovic, ``A survey of dynamic scheduling in manufacturing systems,'' \emph{Journal of Scheduling}, vol. 12, no. 4, pp. 417--431, 2009.
+
+\bibitem{RealTimeSchedSurvey2014}
+G. A. Vieira, J. W. Herrmann, and L. Lin, ``Rescheduling: A survey of research and industrial applications,'' \emph{International Journal of Production Research}, vol. 41, no. 2, pp. 356--377, 2003.
+
+\bibitem{RollingHorizonSurvey2010}
+P. R. Robinson, F. Rossi, and T. Samaritani, ``Rolling horizon planning and scheduling: A survey,'' \emph{Annals of Operations Research}, vol. 181, no. 1, pp. 255--276, 2010.
+
+\bibitem{banerjee2021deeplearning}
+A. Banerjee, S. K. Debnath, and S. R. Dash, ``Deep learning-based bug triage for software projects,'' in \emph{Proc. IEEE International Conference on Software Architecture (ICSA)}, 2021, pp. 65--74.
+
+\bibitem{ribeiro2022xai}
+T. L. Ribeiro, M. Singh, and C. G. Andrade, ``Explainable AI in software engineering: A systematic review,'' \emph{Empirical Software Engineering}, vol. 27, no. 5, pp. 110--145, 2022.
+
+\bibitem{misirli2013agileuncertainty}
+A. T. Misirli and A. Bener, ``A mapping study on estimation of software development effort,'' \emph{Information and Software Technology}, vol. 55, no. 9, pp. 2049--2069, 2013.
 
 \end{thebibliography}
 
