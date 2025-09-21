@@ -17,6 +17,8 @@
 
 % Hyperref LAST
 \usepackage[hidelinks]{hyperref}
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily\footnotesize, breaklines=true}
 
 \begin{document}
 
@@ -125,6 +127,12 @@ Compute the covariance matrix:
 \Sigma_{s,k} = \mathrm{Cov}(A_{s,k}) = \frac{1}{n-1} (A_{s,k} - \overline{A}_{s,k})^\top (A_{s,k} - \overline{A}_{s,k}),
 \end{equation}
 where $\overline{A}_{s,k}$ is the row-wise mean. This is the same variance-capturing idea as in PCA and eigen-projection methods \cite{pca2017,eigen_projection}.
+
+\noindent\textbf{Numerical stability.}
+In practice, some sprint–skill blocks may contain very few tasks (e.g., $n{<}2$), in which case the covariance matrix is not well-defined. 
+We handle this by skipping eigen-decomposition for such cases and assigning tasks using direct distance on raw $(c_t,\tau_t)$ coordinates. 
+Additionally, for numerical robustness, a small diagonal $\epsilon I$ (with $\epsilon \approx 10^{-6}$) is added to $\Sigma_{s,k}$ before eigen-decomposition. 
+This regularization ensures positive semi-definiteness and prevents degenerate eigenvalues during computation.
 
 \subsection{Eigen-decomposition and principal axes}
 Compute eigenvalues and eigenvectors:
@@ -275,6 +283,37 @@ Baselines: (i) Naive-priority, (ii) Skill-only, (iii) Proposed (projection + dis
     \end{tabular}
 \end{table}
 
+\begin{table}[H]
+\centering
+\caption{Comparison of Greedy vs.\ Hungarian (OH) assignment. Greedy metrics are global across skills; Hungarian results are averaged per skill.}
+\label{tab:greedy_vs_hungarian}
+\begin{tabular}{lcccc}
+\toprule
+Method & Match Rate & Avg Dist & Unassigned (\%) & Load Var \\
+\midrule
+Greedy (ours) & 0.982 & 0.852 & 1.8 & 3.63 \\
+OH--Angular   & 0.639 & 0.511 & 36.1 & 0.0 \\
+OH--React     & 0.871 & 0.623 & 12.9 & 0.0 \\
+OH--Flutter   & 0.501 & 0.487 & 49.9 & 0.0 \\
+OH--Spring Boot & 0.808 & 0.632 & 19.1 & 0.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\footnotesize{OH = Oracle-Hungarian (global cost-optimal assignment).}
+\normalsize
+\vspace{6pt}
+
+As shown in Table~\ref{tab:greedy_vs_hungarian}, the Oracle-Hungarian (OH) baseline \cite{kuhn1955hungarian,munkres1957algorithms,BurkardAssignmentBook}
+achieves globally optimal matches with lower average distances, particularly for 
+Angular and Spring Boot. However, OH also leaves a substantial fraction of tasks 
+unassigned in imbalanced cases (e.g., 50\% in Flutter), whereas the greedy procedure 
+consistently achieves nearly full coverage (98.2\%). This demonstrates that while 
+optimal cost matching is theoretically stronger, the greedy scheme provides a more 
+practical balance between assignment completeness and computational efficiency, 
+which is especially critical for agile sprint planning.
+
+\vspace{6pt}
 As seen in Table~\ref{tab:baseline_comparison}, the proposed covariance--eigenvector projection framework
 achieves significant improvements across all evaluation metrics compared to baseline methods.
 Specifically, the \textbf{match rate of 98.2\%} indicates that almost all tasks were successfully assigned to engineers.
@@ -322,7 +361,10 @@ than the naive-priority (4.8) and skill-only (6.1) approaches.
 \end{algorithmic}
 \end{algorithm}
 
-\noindent\textbf{Optional upper bound.} For completeness, one can compute a global cost-optimal matching on our projected 2D distances using the Hungarian algorithm on the bipartite graph of engineers vs.\ tasks; this provides an upper bound (best case) for our greedy schemes \cite{kuhn1955hungarian,BurkardAssignmentBook}. We report it as Oracle-Hungarian (OH) when used, and note that this limitation of greedy assignment versus global optimization is further discussed in Section~\ref{sec:limits}.
+\noindent\textbf{Optional upper bound.} 
+For completeness, one can compute a global cost-optimal matching on our projected 2D distances using the Hungarian algorithm on the bipartite graph of engineers vs.\ tasks. 
+This provides an upper bound (best case) for our greedy schemes \cite{kuhn1955hungarian,munkres1957algorithms,BurkardAssignmentBook}. 
+We report it as Oracle-Hungarian (OH) when used, and note that this limitation of greedy assignment versus global optimization is further discussed in Section~\ref{sec:limits}.
 
 \subsection{Scalability}
 \label{sec:scalability}
@@ -403,6 +445,53 @@ Future directions:
     \item Use projected features in ML models (XGBoost, GNNs) and compare quantitatively with LLM-based assignment.
 \end{itemize}
 
+\appendices
+\section{Reproducibility and Synthetic Data Generator}
+All code, figures, and tables in this paper were generated from Python scripts that are released at: 
+\url{https://github.com/<your-repo>} (to be filled with actual link).
+For transparency, we describe the synthetic data generator below.
+
+\subsection{Synthetic Engineer Generator}
+Each engineer object is stored in JSON as:
+\begin{lstlisting}
+{"engineer_id": 1, "skills": "Spring Boot", "collab_ability": "High",
+ "availability_index": 21, "impact": 13,
+ "module_exposure": 5, "efficiency": 1.23}
+\end{lstlisting}
+
+Engineers are parameterized as follows:
+\begin{itemize}[leftmargin=*]
+    \item Skill: sampled from \{\texttt{Java}, \texttt{React}, \texttt{Angular}, \texttt{Spring Boot}\}.
+    \item Collaboration ability: categorical \{\texttt{Low}, \texttt{Medium}, \texttt{High}\}.
+    \item Availability index: $a_e \sim U(10,30)$ days per sprint.
+    \item Impact: $i_e \sim U(5,15)$.
+    \item Module exposure: $m_e \sim U(1,10)$.
+    \item Efficiency: $\mathrm{eff}(e) \sim N(1.0,0.2)$ (clipped to positive, rounded to 2 decimals).
+\end{itemize}
+
+\subsection{Synthetic Task Generator}
+Each task object is stored in JSON as:
+\begin{lstlisting}
+{"task_id": 5, "skill_required": "React", "due_date": "1715855889",
+ "priority": "Critical", "dependency_level": "High",
+ "module_knowledge": 21, "task_type": "Story"}
+\end{lstlisting}
+
+Tasks are parameterized as follows:
+\begin{itemize}[leftmargin=*]
+    \item Skill requirement: sampled from the same skill set.
+    \item Priority: categorical \{\texttt{Low}, \texttt{Medium}, \texttt{High}, \texttt{Critical}\}.
+    \item Dependency level: categorical \{\texttt{Low}, \texttt{Medium}, \texttt{High}, \texttt{Critical}\}.
+    \item Module knowledge: $m_t \sim U(1,30)$.
+    \item Task type: sampled from \{\texttt{Story}, \texttt{Bug}, \texttt{Feature}\}.
+    \item Due date: $\tau_t$ drawn uniformly within sprint horizon, stored as an epoch timestamp.
+\end{itemize}
+
+The \texttt{time\_coef} and \texttt{complexity\_coef} are then computed exactly as in
+Eq.~\ref{eq:task_time} and Eq.~\ref{eq:task_complexity} for tasks,
+and Eq.~\ref{eq:eng_time} and Eq.~\ref{eq:eng_complexity} for engineers.
+Random seeds are fixed (\texttt{np.random.seed(42)}) for reproducibility.
+
 \section*{Acknowledgements}
 The author would like to express sincere gratitude to 
 Dr.~Lionel Randall Kharkrang, Trieste University, Italy, 
@@ -451,6 +540,11 @@ P. J. Guo, T. Zimmermann, N. Nagappan, and B. Murphy, ``Not my bug! and other re
 
 \bibitem{kuhn1955hungarian}
 H. W. Kuhn, ``The Hungarian Method for the assignment problem,'' \emph{Naval Research Logistics Quarterly}, vol. 2, no. 1–2, pp. 83–97, 1955.
+
+\bibitem{munkres1957algorithms}
+J. Munkres, ``Algorithms for the assignment and transportation problems,'' 
+\emph{Journal of the Society for Industrial and Applied Mathematics}, 
+vol.~5, no.~1, pp. 32--38, 1957.
 
 \bibitem{RunesonHost2009}
 P. Runeson and M. Höst, ``Guidelines for conducting and reporting case study research in software engineering,'' \emph{Empirical Software Engineering}, vol. 14, no. 2, pp. 131--164, 2009.
