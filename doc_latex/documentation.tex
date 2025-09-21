@@ -17,8 +17,16 @@
 
 % Hyperref LAST
 \usepackage[hidelinks]{hyperref}
-\usepackage{listings}
-\lstset{basicstyle=\ttfamily\footnotesize, breaklines=true}
+
+% listings for JSON and code snippets (prevent overfull boxes)
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  breakatwhitespace=true,
+  columns=fullflexible,
+  frame=single,
+  postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space}
+}
 
 \begin{document}
 
@@ -88,6 +96,8 @@ We keep variable names identical to the implementation for transparency. Table~\
     \end{tabular}
 \end{table*}
 
+\noindent\textbf{Column order convention.} For clarity and to avoid ambiguity we adopt a fixed column order throughout the paper and code: **(complexity, time)** or \((c,\tau)\). All vectors and matrices, figures, and code snippets use this ordering.
+
 \subsection{Feature engineering: time and complexity}
 We adopt the exact calculators used in the prototype code (motivated by parametric estimators and classical effort models \cite{cocomo,parametric_estimate}):
 \begin{equation}
@@ -111,7 +121,7 @@ Tasks and engineers are grouped by \texttt{skill} and by \texttt{sprint\_number}
 This sprint partitioning follows standard rolling-window planning ideas in scheduling literature \cite{RollingHorizonSurvey2010,karger_sched_notes}.
 
 \subsection{Constructing the sprint task matrix and covariance}
-For a given sprint $s$ and skill group $k$, collect the task vectors into a matrix:
+For a given sprint $s$ and skill group $k$, collect the task vectors into a matrix (column order fixed to $(c,\tau)$):
 \[
 A_{s,k} =
 \begin{bmatrix}
@@ -124,15 +134,15 @@ c_{t_n} & \tau_{t_n}
 Compute the covariance matrix:
 \begin{equation}
 \label{eq:cov}
-\Sigma_{s,k} = \mathrm{Cov}(A_{s,k}) = \frac{1}{n-1} (A_{s,k} - \overline{A}_{s,k})^\top (A_{s,k} - \overline{A}_{s,k}),
+\Sigma_{s,k} = \mathrm{Cov}(A_{s,k}) = \frac{1}{n-1} (A_{s,k} - \mathbf{1}\overline{A}_{s,k})^\top (A_{s,k} - \mathbf{1}\overline{A}_{s,k}),
 \end{equation}
-where $\overline{A}_{s,k}$ is the row-wise mean. This is the same variance-capturing idea as in PCA and eigen-projection methods \cite{pca2017,eigen_projection}.
+where \(\overline{A}_{s,k}=\frac{1}{n}\sum_{i=1}^n a_{t_i}\in\mathbb{R}^{1\times 2}\) is the mean row-vector (the column-wise mean across observations), and \(\mathbf{1}\) is an \(n\times 1\) vector of ones. This is the same variance-capturing idea as in PCA and eigen-projection methods \cite{pca2017,eigen_projection}.
 
-\noindent\textbf{Numerical stability.}
-In practice, some sprint–skill blocks may contain very few tasks (e.g., $n{<}2$), in which case the covariance matrix is not well-defined. 
-We handle this by skipping eigen-decomposition for such cases and assigning tasks using direct distance on raw $(c_t,\tau_t)$ coordinates. 
-Additionally, for numerical robustness, a small diagonal $\epsilon I$ (with $\epsilon \approx 10^{-6}$) is added to $\Sigma_{s,k}$ before eigen-decomposition. 
-This regularization ensures positive semi-definiteness and prevents degenerate eigenvalues during computation.
+\noindent\textbf{Numerical stability.} In practice some sprint–skill blocks contain very few tasks (e.g., \(n<2\)), in which case the sample covariance is not well-defined. We handle these edge cases as follows:
+\begin{itemize}[leftmargin=*]
+    \item If \(n<2\), we skip eigen-decomposition and perform assignment directly in the (mean-centered) standardized coordinate space using the raw \((c,\tau)\) vectors (standardized by the global training mean/std for the skill group if available, otherwise by the per-block mean/std with a guard against zero-variance). 
+    \item For \(n\ge2\), before computing eigenvalues we regularize the covariance matrix by adding a small diagonal term: \(\Sigma_{s,k}\leftarrow\Sigma_{s,k}+\epsilon I\) with \(\epsilon=10^{-6}\). This \(\epsilon\)-regularizer (Tikhonov-style) ensures numerical stability and prevents degenerate or zero eigenvalues while leaving principal directions essentially unchanged.
+\end{itemize}
 
 \subsection{Eigen-decomposition and principal axes}
 Compute eigenvalues and eigenvectors:
@@ -142,7 +152,7 @@ Compute eigenvalues and eigenvectors:
 Let $V_{s,k} = [v_1 \; v_2]$ be the matrix of eigenvectors (orthogonal for symmetric covariance).
 
 \subsection{Projection of tasks and engineers}
-Mean-center both tasks and engineers using the task mean $\overline{A}_{s,k}$. For a centered vector $x$ (task or engineer):
+Mean-center both tasks and engineers using the task mean \(\overline{A}_{s,k}\). For a centered vector $x$ (task or engineer) with ordering \((c,\tau)\):
 \begin{equation}
 \label{eq:proj}
 x_{\text{proj}} = V_{s,k}^\top (x - \overline{A}_{s,k}),
@@ -155,7 +165,14 @@ For engineer $e$ and task $t$ in the same projected space:
 \label{eq:euclid}
 \mathrm{dist}(e,t) = \| x_{\text{proj}}(e) - x_{\text{proj}}(t) \|_2.
 \end{equation}
-Greedy assignment: for each engineer, select up to \texttt{task\_limit} closest tasks (optionally enforce a distance threshold), removing tasks as they are assigned. As discussed later, this greedy strategy is a practical heuristic; an optimal assignment can be computed with the Hungarian method for comparison \cite{kuhn1955hungarian,BurkardAssignmentBook}.
+Greedy assignment: for each engineer, select up to \texttt{task\_limit} closest tasks (optionally enforce a distance threshold), removing tasks as they are assigned. Tie-breaking rule: when multiple engineers (or tasks) have identical distance, ties are broken by preferring the engineer with the smaller current load (number of assigned tasks); if loads are equal, a deterministic ordering by engineer ID is used.
+
+\noindent\textbf{Optional upper bound (Oracle-Hungarian).} For completeness, one can compute a global cost-optimal matching on our projected 2D distances using the Hungarian algorithm on the bipartite graph of engineers vs.\ tasks; this provides an upper bound (best case) for our greedy schemes \cite{kuhn1955hungarian,BurkardAssignmentBook}. There are two standard ways to handle differing cardinalities or capacity constraints when applying Hungarian:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Engineer-expansion (capacity-respecting).} Replicate each engineer node $L$ times to encode a per-engineer capacity $L$; the cost matrix is then expanded and Hungarian returns a full matching when supply allows.
+    \item \textbf{Padding with dummy columns (coverage-limiting).} Pad the cost matrix to be square by adding dummy engineers with very large assignment cost; this forces Hungarian to avoid matching tasks to dummy agents and therefore can result in many tasks left unassigned (interpreted as the problem being undersupplied).
+\end{itemize}
+When reporting Hungarian / Oracle-Hungarian (OH) results we indicate which variant was used in the table captions. See Section~\ref{sec:results} for the observed tradeoffs.
 
 \subsection{Pseudocode}
 \begin{algorithm}[H]
@@ -165,13 +182,13 @@ Greedy assignment: for each engineer, select up to \texttt{task\_limit} closest 
 \Require sprint\_matrix, sprint\_tasks\_eigen\_data, task\_limit, distance\_threshold
 \For{each sprint $s$}
   \For{each skill $k$ in sprint $s$}
-    \State Build $A_{s,k}$ from tasks
-    \State Compute $\Sigma_{s,k}$, eigenvectors $V_{s,k}$
+    \State Build $A_{s,k}$ from tasks (column order $(c,\tau)$)
+    \State Compute $\Sigma_{s,k}$, add $\epsilon I$, compute eigenvectors $V_{s,k}$ if $n\ge2$
     \State Mean-center tasks and engineers using $\overline{A}_{s,k}$
     \State Project: $x_{\text{proj}} = V_{s,k}^\top (x - \overline{A}_{s,k})$
     \For{each engineer $e$}
       \State compute distances to all unassigned tasks
-      \State sort by distance; assign up to \texttt{task\_limit} within threshold
+      \State sort by distance; assign up to \texttt{task\_limit} within threshold, break ties by current load then ID
       \State mark selected tasks as assigned
     \EndFor
   \EndFor
@@ -237,17 +254,21 @@ Greedy assignment: for each engineer, select up to \texttt{task\_limit} closest 
 \end{table}
 
 \subsection{Baselines and metrics}
-Baselines: (i) Naive-priority, (ii) Skill-only, (iii) Proposed (projection + distance). Metrics: assignment match rate, average projected distance, unassigned fraction, load balance variance, wall-clock runtime.
+Baselines: (i) Naive-priority (NP), (ii) Skill-only (SO), (iii) Proposed (projection + distance). Metrics: assignment match rate, average projected distance, unassigned fraction, load balance variance (denoted \texttt{load\_var}: the variance of assigned-task counts across engineers), wall-clock runtime.
+
+\noindent\textbf{Naive-Priority (NP).} This baseline orders tasks by an operational priority and assigns them greedily to any engineer with the matching skill until capacity is reached. Priority queues and dispatching rules (e.g., earliest-due-date, shortest-processing-time) are widely used heuristics in scheduling and are standard in practice for triage when richer models are unavailable \cite{karger_sched_notes}. Ties among engineers are broken by preferring the least-loaded engineer and then by engineer ID.
+
+\noindent\textbf{Skill-Only (SO).} This baseline ignores time/complexity geometry and assigns uniformly at random among engineers who have the required skill (subject to per-engineer capacity). It mirrors the simplest “skills-based routing” idea from workforce allocation that underlies many practical systems and early bug triage approaches \cite{xuan2017bugtriage,guo2011notmybug}.
 
 % -------------------------------------------------
-\section{Results}\label{sec:results} % <-- TODO: Put the result plots
+\section{Results}\label{sec:results}
 
 \subsection{Visualization}
 % Figure 1: raw scatter (time vs complexity)
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\linewidth]{all_engineers_tasks.png}
-    \caption{Raw \texttt{time\_coef} vs \texttt{complexity\_coef}.}
+    \caption{Raw \texttt{complexity\_coef} vs \texttt{time\_coef}. Column order is $(c,\tau)$.}
     \label{fig:raw_scatter}
 \end{figure}
 
@@ -285,7 +306,7 @@ Baselines: (i) Naive-priority, (ii) Skill-only, (iii) Proposed (projection + dis
 
 \begin{table}[H]
 \centering
-\caption{Comparison of Greedy vs.\ Hungarian (OH) assignment. Greedy metrics are global across skills; Hungarian results are averaged per skill.}
+\caption{Comparison of Greedy vs.\ Hungarian (OH) assignment. Greedy metrics are global across skills; Hungarian results are per-skill using the padding variant unless otherwise indicated.}
 \label{tab:greedy_vs_hungarian}
 \begin{tabular}{lcccc}
 \toprule
@@ -300,18 +321,12 @@ OH--Spring Boot & 0.808 & 0.632 & 19.1 & 0.0 \\
 \end{tabular}
 \end{table}
 
-\noindent\footnotesize{OH = Oracle-Hungarian (global cost-optimal assignment).}
+\noindent\footnotesize{OH = Oracle-Hungarian (global cost-optimal assignment). The OH numbers above were produced using the padding-with-dummies variant (see Methods).}
 \normalsize
 \vspace{6pt}
 
 As shown in Table~\ref{tab:greedy_vs_hungarian}, the Oracle-Hungarian (OH) baseline \cite{kuhn1955hungarian,munkres1957algorithms,BurkardAssignmentBook}
-achieves globally optimal matches with lower average distances, particularly for 
-Angular and Spring Boot. However, OH also leaves a substantial fraction of tasks 
-unassigned in imbalanced cases (e.g., 50\% in Flutter), whereas the greedy procedure 
-consistently achieves nearly full coverage (98.2\%). This demonstrates that while 
-optimal cost matching is theoretically stronger, the greedy scheme provides a more 
-practical balance between assignment completeness and computational efficiency, 
-which is especially critical for agile sprint planning.
+achieves globally optimal matches with lower average distances in many skill groups (Angular, Spring Boot). However, OH also leaves a substantial fraction of tasks unassigned in imbalanced cases (e.g., 50\% in Flutter when the padding-with-dummies variant was used), whereas the greedy procedure consistently achieves nearly full coverage (98.2\%) under the task-limit expansion strategy we use in the greedy heuristic. This demonstrates that while optimal cost matching is theoretically stronger in terms of cost, the greedy scheme provides a more practical balance between assignment completeness and computational efficiency for sprint planning. The effect and modeling choices (padding vs. expansion) are noted in the Appendix so the exact variant can be reproduced.
 
 \vspace{6pt}
 As seen in Table~\ref{tab:baseline_comparison}, the proposed covariance--eigenvector projection framework
@@ -320,7 +335,7 @@ Specifically, the \textbf{match rate of 98.2\%} indicates that almost all tasks 
 The \textbf{average assignment distance of 0.85} in the projected space demonstrates that engineers were matched
 to tasks that are very close in terms of time and complexity characteristics, reflecting strong alignment.
 Only \textbf{1.8\% of tasks remained unassigned}, which highlights the much lower mismatch compared to the \textbf{28--39\%} in the baselines and clearly visualizes the underlying crisis of engineer capacity or task prioritization.
-Finally, the \textbf{load variance of 3.63} suggests a more balanced distribution of tasks across engineers
+Finally, the \textbf{load variance of 3.63} (variance of assigned-task counts across engineers) suggests a more balanced distribution of tasks across engineers
 than the naive-priority (4.8) and skill-only (6.1) approaches.
 
 \subsection{Baselines (defined and justified)}
@@ -448,12 +463,25 @@ Future directions:
 \appendices
 \section{Reproducibility and Synthetic Data Generator}
 All code, figures, and tables in this paper were generated from Python scripts that are released at: 
-\url{https://github.com/<your-repo>} (to be filled with actual link).
-For transparency, we describe the synthetic data generator below.
+\url{https://github.com/amekse/karyakal}.
+For transparency, we describe the synthetic data generator below and provide basic environment/run instructions.
+
+\subsection{Environment and run}
+The experiments were developed and tested with:
+\begin{itemize}[leftmargin=*]
+    \item Python 3.10 (recommended)
+    \item numpy (>=1.23), scipy (>=1.8), pandas (>=1.4), scikit-learn (>=1.0), matplotlib (>=3.5)
+\end{itemize}
+
+A minimal reproduction command (example):
+\begin{verbatim}
+python run_experiment.py --seed 42 --output_dir results/
+\end{verbatim}
+A complete `requirements.txt` is available in the repository.
 
 \subsection{Synthetic Engineer Generator}
 Each engineer object is stored in JSON as:
-\begin{lstlisting}
+\begin{lstlisting}[language=json]
 {"engineer_id": 1, "skills": "Spring Boot", "collab_ability": "High",
  "availability_index": 21, "impact": 13,
  "module_exposure": 5, "efficiency": 1.23}
@@ -471,7 +499,7 @@ Engineers are parameterized as follows:
 
 \subsection{Synthetic Task Generator}
 Each task object is stored in JSON as:
-\begin{lstlisting}
+\begin{lstlisting}[language=json]
 {"task_id": 5, "skill_required": "React", "due_date": "1715855889",
  "priority": "Critical", "dependency_level": "High",
  "module_knowledge": 21, "task_type": "Story"}
@@ -490,7 +518,7 @@ Tasks are parameterized as follows:
 The \texttt{time\_coef} and \texttt{complexity\_coef} are then computed exactly as in
 Eq.~\ref{eq:task_time} and Eq.~\ref{eq:task_complexity} for tasks,
 and Eq.~\ref{eq:eng_time} and Eq.~\ref{eq:eng_complexity} for engineers.
-Random seeds are fixed (\texttt{np.random.seed(42)}) for reproducibility.
+Random seeds are fixed via the main driver (e.g., \texttt{np.random.seed(42)}) for reproducibility when required.
 
 \section*{Acknowledgements}
 The author would like to express sincere gratitude to 
