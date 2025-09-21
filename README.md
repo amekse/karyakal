@@ -26,7 +26,7 @@ It focuses on **task evaluation, engineer efficiency, and intelligent matching o
 Clone the repository and create a virtual environment:
 
 ```bash
-git clone https://github.com/<your-username>/karyakal.git
+git clone https://github.com/amekse/karyakal.git
 cd karyakal
 python -m venv venv
 source venv/bin/activate   # On Windows: venv\Scripts\activate
