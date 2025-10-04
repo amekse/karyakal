@@ -53,7 +53,17 @@
 
 
 \begin{abstract}
-This paper presents a mathematically interpretable framework for task allocation in Agile engineering teams. Tasks and engineers are quantified using two primary axes: \texttt{time\_coef} and \texttt{complexity\_coef}. For each sprint and skill group we compute the covariance matrix of the task distribution, perform eigen-decomposition to obtain principal axes, and project both tasks and engineers into the resulting eigenvector basis to bring them into a common, scaled, variance-preserving coordinate system. Assignments are then made by nearest-distance matching (Euclidean distance) in the projected space. The framework is intended as a transparent, reproducible baseline that can be used alone or as a distillation/simulator for AI-driven assignment models.
+
+\textbf{Context:} Task allocation in Agile software development remains largely manual, despite the widespread use of digital tools such as JIRA and Trello. While AI-based solutions exist, they often behave as opaque black boxes, making them difficult to interpret or audit. There is a need for transparent, mathematically grounded approaches to engineer–task matching that can serve as reproducible baselines for future AI-driven systems. \\[3pt]
+
+\textbf{Objective:} This work introduces an interpretable, variance-preserving framework for task allocation in Agile teams. The goal is to model and assign tasks to engineers using a covariance–eigenvector projection approach that maintains transparency while providing high-quality allocations comparable to optimized or AI-assisted methods. \\[3pt]
+
+\textbf{Method:} Tasks and engineers are each characterized by two interpretable coefficients: time and complexity. For each sprint–skill block, a covariance matrix is constructed from task distributions and decomposed into eigenvectors to define principal axes. Both tasks and engineers are projected into this common coordinate system, and assignments are made using Euclidean distance. The method is benchmarked against naive-priority, skill-only, and Hungarian-optimal baselines using reproducible synthetic datasets. \\[3pt]
+
+\textbf{Results:} The proposed framework achieves a 98.2\% match rate, 1.8\% unassigned tasks, and lower variance in engineer load compared to baselines. It remains computationally efficient (under 0.04 seconds per sprint for 1000 tasks) and provides interpretable, audit-ready allocation outcomes. \\[3pt]
+
+\textbf{Conclusion:} The covariance–eigenvector projection framework offers a mathematically interpretable and efficient baseline for task allocation in Agile environments. It bridges the gap between human-readable heuristics and black-box AI methods, serving as a transparent foundation for future extensions involving multi-skill modeling and dynamic scheduling.
+
 \end{abstract}
 
 \begin{keyword}
@@ -564,6 +574,10 @@ and did not involve human participants, personal data, or sensitive information.
 
 \section*{Author ORCID}
 Saswata Das: \href{https://orcid.org/0009-0005-9235-8169}{0009-0005-9235-8169}
+
+\section*{Declaration of generative AI and AI-assisted technologies in the manuscript preparation process}
+
+During the preparation of this work the author used OpenAI's ChatGPT (GPT-5) to assist with language polishing, formatting in LaTeX, and restructuring sections for clarity and journal style compliance. After using this tool, the author reviewed, edited, and verified all content as needed, and takes full responsibility for the content of the published article.
 
 % -------------------------------------------------
 \begin{thebibliography}{99}
